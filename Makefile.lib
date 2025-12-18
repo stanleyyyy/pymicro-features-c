@@ -1,0 +1,87 @@
+# Makefile for building the micro_features C library
+
+CC ?= gcc
+CXX ?= g++
+CFLAGS ?= -Wall -Wextra -O2
+CXXFLAGS ?= -Wall -Wextra -O2
+LDFLAGS ?=
+CFLAGS += -DFIXED_POINT=16
+CXXFLAGS += -DFIXED_POINT=16
+INCLUDES = -I. -Iinclude -Ikissfft
+TENSORFLOW_DIR = tensorflow/lite/experimental/microfrontend/lib
+KISSFFT_DIR = kissfft
+
+# Source files for the library
+LIB_SOURCES = \
+	src/micro_features_lib.c \
+	$(TENSORFLOW_DIR)/kiss_fft_int16.cc \
+	$(TENSORFLOW_DIR)/fft.cc \
+	$(TENSORFLOW_DIR)/fft_util.cc \
+	$(TENSORFLOW_DIR)/filterbank.cc \
+	$(TENSORFLOW_DIR)/filterbank_util.cc \
+	$(TENSORFLOW_DIR)/frontend.cc \
+	$(TENSORFLOW_DIR)/frontend_util.cc \
+	$(TENSORFLOW_DIR)/log_lut.cc \
+	$(TENSORFLOW_DIR)/log_scale.cc \
+	$(TENSORFLOW_DIR)/log_scale_util.cc \
+	$(TENSORFLOW_DIR)/noise_reduction.cc \
+	$(TENSORFLOW_DIR)/noise_reduction_util.cc \
+	$(TENSORFLOW_DIR)/pcan_gain_control.cc \
+	$(TENSORFLOW_DIR)/pcan_gain_control_util.cc \
+	$(TENSORFLOW_DIR)/window.cc \
+	$(TENSORFLOW_DIR)/window_util.cc \
+	$(KISSFFT_DIR)/kiss_fft.cc \
+	$(KISSFFT_DIR)/tools/kiss_fftr.cc
+
+# Convert source paths to object paths in build directory
+BUILD_DIR = build
+LIB_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(patsubst %.cc,$(BUILD_DIR)/%.o,$(LIB_SOURCES)))
+
+# Library name
+LIBRARY = libmicro_features.a
+
+# Example executables
+EXAMPLE_C = examples/example_c
+EXAMPLE_CPP = examples/example_cpp
+
+# Test executable
+TEST = tests/test_micro_features
+
+.PHONY: all clean library examples test
+
+all: library examples
+
+library: $(LIBRARY)
+
+$(LIBRARY): $(LIB_OBJECTS) | $(BUILD_DIR)
+	ar rcs $@ $^
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)/src $(BUILD_DIR)/$(TENSORFLOW_DIR) $(BUILD_DIR)/$(KISSFFT_DIR) $(BUILD_DIR)/$(KISSFFT_DIR)/tools
+
+# Compile C files
+$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# Compile C++ files
+$(BUILD_DIR)/%.o: %.cc | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+examples: $(EXAMPLE_C) $(EXAMPLE_CPP)
+
+$(EXAMPLE_C): examples/example.c $(LIBRARY)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) -o $@ $< -L. -lmicro_features -lm
+
+$(EXAMPLE_CPP): examples/example.cpp $(LIBRARY)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(INCLUDES) -o $@ $< -L. -lmicro_features -lm
+
+test: $(TEST)
+
+$(TEST): tests/test_micro_features.c tests/wav_reader.c $(LIBRARY)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) -o $@ tests/test_micro_features.c tests/wav_reader.c -L. -lmicro_features -lm
+
+clean:
+	rm -rf $(BUILD_DIR) $(LIBRARY) $(EXAMPLE_C) $(EXAMPLE_CPP) $(TEST)
+
